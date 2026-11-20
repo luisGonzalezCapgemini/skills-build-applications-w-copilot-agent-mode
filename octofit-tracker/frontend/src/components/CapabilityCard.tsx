@@ -6,8 +6,9 @@ type RecordData = Record<string, unknown>;
 type Props = {
   title: string;
   description: string;
-  endpoint: string;
-  collectionKey: string;
+  endpoint?: string;
+  collectionKey?: string;
+  loadItems?: () => Promise<RecordData[]>;
   emptyMessage: string;
 };
 
@@ -22,7 +23,9 @@ function displayValue(value: unknown): string {
   return '';
 }
 
-export function CapabilityCard({ title, description, endpoint, collectionKey, emptyMessage }: Props) {
+export function CapabilityCard(props: Props) {
+  const { title, description, emptyMessage } = props;
+  const { endpoint, collectionKey, loadItems } = props;
   const [items, setItems] = useState<RecordData[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -32,11 +35,19 @@ export function CapabilityCard({ title, description, endpoint, collectionKey, em
     setLoading(true);
     setError(null);
 
-    getJson<Record<string, unknown>>(endpoint)
-      .then((response) => {
-        const collection = response[collectionKey];
-        if (!isRecordArray(collection)) throw new Error('Invalid API response');
-        if (active) setItems(collection);
+    const request = loadItems
+      ? loadItems()
+      : endpoint && collectionKey
+        ? getJson<Record<string, unknown>>(endpoint).then((response) => {
+          const collection = response[collectionKey];
+          if (!isRecordArray(collection)) throw new Error('Invalid API response');
+          return collection;
+        })
+        : Promise.reject(new Error('No data source configured'));
+
+    request
+      .then((loadedItems) => {
+        if (active) setItems(loadedItems);
       })
       .catch((requestError: unknown) => {
         if (active) setError(requestError instanceof Error ? requestError.message : 'Unknown error');
@@ -48,7 +59,7 @@ export function CapabilityCard({ title, description, endpoint, collectionKey, em
     return () => {
       active = false;
     };
-  }, [endpoint, collectionKey]);
+  }, [endpoint, collectionKey, loadItems]);
 
   return (
     <section className="card h-100">
